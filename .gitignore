@@ -1,0 +1,47 @@
+# ==========================================
+# 1. Heavy Deep Learning Files
+# ==========================================
+# Ignore raw model weights (Llama/Mistral)
+model_weights/
+
+# Ignore extracted hidden state tensors
+features/
+*.pt
+*.pth
+*.tensor
+*.safetensors
+
+# Ignore trained probe weights and metrics
+checkpoints/
+
+# ==========================================
+# 2. Datasets
+# ==========================================
+# Ignore raw datasets to save repository space
+datasets/*.csv
+datasets/*.txt
+datasets/*.json
+
+# ==========================================
+# 3. Caches
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
+# ==========================================
+# 4. Virtual Environments
+# ==========================================
+venv/
+env/
+.env
+.venv
+
+# ==========================================
+# 5. OS & IDE Specific
+# ==========================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
