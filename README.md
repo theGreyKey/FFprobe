@@ -1,4 +1,4 @@
-# The Energy Landscape of Hallucinations: Decoding and Intercepting LLM Confabulations via Forward-Forward Probes
+# Forward-Forward Probes for LLM Hallucination Detection: Local Energy as an Interpretable, Interventional, and Continually Learnable Signal
 
 This repository contains the official implementation of a novel mechanistic interpretability framework that utilizes **Forward-Forward (FF) Probes** to decode, intercept, and causally intervene in Large Language Model (LLM) hallucinations.
 
@@ -143,5 +143,6 @@ All evaluation, visualization, and causal intervention pipelines have been conso
 * **Asymmetric Generalization**: Probes trained exclusively on natural hallucinations generalize perfectly to synthetic structural noise (AUROC > `0.88`). However, probes trained on synthetic entity swaps fail completely on natural hallucinations (AUROC `~0.56`), criticizing the current alignment paradigm's over-reliance on synthetic negative samples.
 
 ## 📜 License
+
 
 This project is licensed under the MIT License.
