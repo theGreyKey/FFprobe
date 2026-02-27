@@ -1,4 +1,3 @@
-
 # The Energy Landscape of Hallucinations: Decoding and Intercepting LLM Confabulations via Forward-Forward Probes
 
 This repository contains the official implementation of a novel mechanistic interpretability framework that utilizes **Forward-Forward (FF) Probes** to decode, intercept, and causally intervene in Large Language Model (LLM) hallucinations.
@@ -21,30 +20,33 @@ The project is highly modularized into logical Python packages:
 ├── config.py                                 # Centralized hyperparameter & path configurations
 ├── core/
 │   ├── __init__.py
-│   └── ff_probe.py                           # Core FF Probe architecture with PeerNorm
+│   └── ff_probe.py                           # Core FF Probe architecture with PeerNorm & Z-Score
 ├── utils/
 │   ├── __init__.py
 │   ├── data_loader.py                        # Aligned data pipelines for SimpleQA & LogiQA
 │   ├── baselines.py                          # LR, Mass-Mean, Standard MLP, Ablation models
+│   ├── advanced_baselines.py                 # Frontier probes (RepE, SAPLMA, NL-CCS, ConceptBottleneck, etc.)
+│   ├── evaluation.py                         # Academic metrics, Bootstrap CI, DeLong & McNemar Tests
 │   └── visualization.py                      # Publication-ready plotting functions
-├── extract_features.py                       # Pipeline to extract hidden states from Llama-3.1
+├── download_model.py                         # Download Llama-3.1 via ModelScope
+├── extract_features.py                       # Pipeline to extract hidden states from LLMs
 ├── train_probe.py                            # FF Probe training script
-├── experiment.ipynb                          # Including all the experiemnts conducted in the paper
+├── experiment.ipynb                          # Master notebook including all experiments conducted in the paper
 ├── requirements.txt                          # Environment dependencies
 ├── LICENSE                                   # MIT License
 ├── datasets/                                 # Source data (SimpleQA, LogiQA)
 ├── features/                                 # Extracted `.pt` hidden state tensors
 ├── checkpoints/                              # Saved FF Probe weights and metrics
 └── model_weights/                            # Local cache for the Llama-3.1-8B-Instruct model
-
 ```
 
 ## ⚙️ Installation & Setup
 
-> **⚠️ Hardware Compatibility Note:** 
-> All experiments and code in this repository were developed and executed on a **single NVIDIA RTX 4090 (24GB PCIe)** GPU. Currently, the pipeline is strictly optimized for single-GPU execution and has **not** been adapted for multi-GPU server clusters (e.g., `DistributedDataParallel` or multi-node setups). Please ensure your environment has at least 24GB of VRAM to comfortably run the Llama-3.1-8B-Instruct feature extraction.
+> **⚠️ Hardware Compatibility Note:** > All experiments and code in this repository were developed and executed on a **single NVIDIA RTX 4090 (24GB PCIe)** GPU. Currently, the pipeline is strictly optimized for single-GPU execution and has **not** been adapted for multi-GPU server clusters (e.g., `DistributedDataParallel`). Please ensure your environment has at least 24GB of VRAM to comfortably run the Llama-3.1-8B-Instruct feature extraction.
 
-This repository is optimized for NVIDIA NGC containers and PyTorch 2.4+ environments.
+### Step 1: Environment Setup
+
+This repository is optimized for PyTorch 2.4+ environments.
 
 ```bash
 # Clone the repository
@@ -53,8 +55,48 @@ cd ff-hallucination-probe
 
 # Install dependencies
 pip install -r requirements.txt
+
 ```
+
 *(Note: `transformers==4.44.2` is strictly required to ensure proper RoPE scaling and parameter compatibility with Llama-3.1-8B-Instruct).*
+
+### Step 2: Data & Model Preparation
+
+You need to download the datasets and the LLM weights. **Please ensure all downloaded assets are saved in the `data/` folder** (or update your `config.py` accordingly).
+
+**For Datasets:**
+
+```python
+from datasets import load_dataset
+# Save to your local data/ directory
+ds_sqa = load_dataset("google/simpleqa-verified", cache_dir="./data")
+ds_logi = load_dataset("lucasmccabe/logiqa", cache_dir="./data")
+
+```
+
+**For Model Weights (Llama-3.1-8B-Instruct):**
+
+* **🌐 Global Users (via Hugging Face):**
+You can directly load or download the model using the `transformers` library:
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+model_id = "meta-llama/Llama-3.1-8B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir="./model_weights")
+model = AutoModelForCausalLM.from_pretrained(model_id, cache_dir="./model_weights", device_map="auto")
+
+# Test Generation
+messages = [{"role": "user", "content": "Who are you?"}]
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=40)
+print(tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:]))
+```
+
+
+* **🇨🇳 Users in China (via ModelScope):** To avoid network issues, we highly recommend downloading the model via ModelScope. You can just simply run our download_model.py:
+```bash
+python download_model.py
+```
 
 ## 🚀 Usage Pipeline
 
@@ -68,7 +110,7 @@ Extract the layer-wise hidden states (the last token) for both SimpleQA and Logi
 python extract_features.py
 ```
 
-* Outputs: `features/simpleqa_features_N800.pt`, `features/logiqa_features_N800.pt*`
+* Outputs: `features/simpleqa_features_N800.pt`, `features/logiqa_features_N800.pt`
 
 ### Step 2: Probe Training
 
@@ -78,27 +120,27 @@ Train the FF Probe (with PeerNorm) and generate evaluation metrics.
 python train_probe.py
 ```
 
-* Outputs: `checkpoints/ff_weights_N800_D512.pt`, `checkpoints/ff_metrics_N800_D512.pt*`
+* Outputs: `checkpoints/ff_weights_N800_D512.pt`, `checkpoints/ff_metrics_N800_D512.pt`
 
 ### Step 3: Comprehensive Mechanistic Evaluation
 
 All evaluation, visualization, and causal intervention pipelines have been consolidated into a single master notebook. Open `experiment.ipynb` to execute:
 
-* **Fast Baseline Evaluation**: Compare FFprobe against advanced baselines (Probability/Entropy, CCS, Mass-Mean, LR, MLP) and generate the layer-wise AUROC plot and academic benchmark table.
-* **Ablation Studies**: Validate the layer-wise stability contribution of `PeerNorm` and the cross-domain necessity of `Z-Score`.
-* **Cognitive Orthogonality**: Extract and visualize the top causal neurons for SimpleQA (Facts) vs. LogiQA (Logic) to observe the 0.0% dimensional overlap.
-* **Surgical Continual Learning**: Execute micro-dosing domain replay to compare the FFprobe's zero-forgetting adaptation against the MLP's catastrophic collapse across multiple random seeds.
-* **Energy Landscape & Phase Transition**: Interpolate between factual and hallucinated hidden states to visualize the Goodness landscape shift.
-* **Goodness-Driven Causal Ablation**: Ablate the top-30 causal neurons identified by the FF gradient to forcefully revert hallucination representations back to the factual baseline.
-* **Real-time Trajectory**: Track the token-by-token FF Goodness score dynamically as the LLM generates a response.
-* **Taxonomy Matrix**: Generate a 3x3 asymmetric cross-generalization heatmap across Natural, EntitySwap, and Noise distributions.
+* **SOTA Baseline Evaluation & Statistical Tests**: Compare FF-Probe against 11 advanced baselines (including RepE, SAPLMA, NL-CCS, KNN, etc.). Generates comprehensive academic reports featuring 95% Bootstrap CI, DeLong Tests, and McNemar Tests.
+* **Cognitive Separation (Top-K Sweep)**: Execute a rigorous Top-K dimension sweep to prove that the neural overlap between factual and logical circuits perfectly tracks theoretical random chance.
+* **Cross-Model Zero-Shot Generalization**: Apply the FF-Probe trained exclusively on Llama-3.1-8B directly onto Mistral-7B-Instruct to observe semantic convergence at deep layers.
+* **Surgical Continual Learning**: Execute micro-dosing domain replay to compare the FF-Probe's zero-forgetting adaptation against the MLP's catastrophic collapse across multiple random seeds.
+* **Goodness-Driven Interventional Ablation**: Ablate the top-30 causal neurons identified by the FF gradient to forcefully revert hallucinated representations back to the factual baseline.
+* **Real-time Cognitive Trajectory**: Track the token-by-token FF Goodness score dynamically as the LLM falls into complex literature/logic jailbreaks.
+* **Asymmetric Taxonomy Matrix**: Generate a 3x3 cross-generalization heatmap across Natural, EntitySwap, and Noise distributions.
 
 ## 📊 Experimental Highlights
 
-* **Zero-Forgetting Continual Learning**: In cross-domain incremental learning scenarios, our FFprobe adapts to the logical domain with a backward transfer (BWT) of `-0.0077` (effectively 0%), compared to a devastating `-18.57%` catastrophic forgetting in standard MLPs.
-* **Parametric Orthogonality**: The Top 50 factual neurons identified by the FFprobe gradient are completely ignored by the logic probe (0.0% overlap), proving that the LLM routes different types of truthfulness through orthogonal semantic dimensions.
-* **Asymmetric Generalization**: Probes trained exclusively on natural hallucinations generalize perfectly to synthetic structural noise (AUROC > `0.88`). However, probes trained on synthetic entity swaps fail completely on natural hallucinations (AUROC `~0.56`), providing quantitative proof of hallucination dimensionality.
-
+* **SOTA Detection & Absolute Rigor**: FF-Probe achieves an unprecedented AUROC of **0.9116**, outperforming the strongest baseline with massive effect sizes (Cohen's d = 1.800) and strict statistical significance ($p < 0.001$ in both DeLong and McNemar tests).
+* **Cognitive Separation**: By sweeping the Top-K causal neurons (up to $K=2000$), we empirically demonstrate that the overlap ratio between factual and logical routing perfectly bounds to the theoretical random chance ($K / D$). This mathematically proves that LLMs utilize **highly separable, mutually orthogonal neural sub-spaces** rather than a universal truth hyper-plane.
+* **Universal Truth Geometry (Cross-Architecture Transfer)**: A probe trained entirely on Llama-3.1 hidden states achieves a remarkable zero-shot AUROC of **0.75** at deep layers when directly applied to Mistral-7B, providing strong mechanistic evidence for cross-architecture semantic convergence.
+* **Zero-Forgetting Continual Learning**: In cross-domain incremental learning scenarios, our FF-Probe adapts to the logical domain with a backward transfer (BWT) of `-0.0077%` (effectively zero), dodging the devastating `-18.57%` catastrophic forgetting observed in standard MLPs.
+* **Asymmetric Generalization**: Probes trained exclusively on natural hallucinations generalize perfectly to synthetic structural noise (AUROC > `0.88`). However, probes trained on synthetic entity swaps fail completely on natural hallucinations (AUROC `~0.56`), criticizing the current alignment paradigm's over-reliance on synthetic negative samples.
 
 ## 📜 License
 

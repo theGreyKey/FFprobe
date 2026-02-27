@@ -24,15 +24,28 @@ def plot_auroc_comparison(results_dict):
     best_our_auc, best_our_layer = 0, 0
     
     styles = {
-        'Ours (FF Probe + PeerNorm)':   {'color': '#E74C3C', 'marker': 'o', 'lw': 3.0, 'ls': '-'},
-        'Ablation (FF No PeerNorm)':    {'color': '#E67E22', 'marker': 'v', 'lw': 2.0, 'ls': '--'},
-        'Baseline (CCS)':               {'color': '#8E44AD', 'marker': 'X', 'lw': 2.0, 'ls': '-.'},
-        'Baseline (MLP)':               {'color': '#2ECC71', 'marker': 'D', 'lw': 2.0, 'ls': '-'},
-        'Baseline (LR)':                {'color': '#3498DB', 'marker': 's', 'lw': 2.0, 'ls': '--'},
-        'Baseline (Mass-Mean)':         {'color': '#F1C40F', 'marker': '^', 'lw': 2.0, 'ls': ':'},
-        'Baseline (Probability)':       {'color': '#7F8C8D', 'marker': '',  'lw': 2.5, 'ls': '--'}
+        # 1. Ours & Reference Lines
+        'Ours (FF Probe + PeerNorm)':   {'color': '#E74C3C', 'marker': 'o', 'lw': 3.5, 'ls': '-'},   # Crimson Red (Highlight)
+        'Ablation (FF No PeerNorm)':    {'color': '#E67E22', 'marker': 'v', 'lw': 2.0, 'ls': '--'},  # Orange
+        'Baseline (Probability)':       {'color': '#7F8C8D', 'marker': '',  'lw': 2.5, 'ls': '--'},  # Flat Gray
+        
+        # 2. Advanced Baselines - Deep DL (Dark/Navy Blues)
+        'Baseline (SAPLMA)':            {'color': '#0B2447', 'marker': 'p', 'lw': 2.0, 'ls': '-'},   # Navy Blue
+        'Baseline (NL-CCS)':            {'color': '#154360', 'marker': 'P', 'lw': 2.0, 'ls': '--'},  # Deep Ocean Blue
+        'Baseline (ConceptBottleneck)': {'color': '#1A5276', 'marker': '*', 'lw': 2.0, 'ls': '-.'},  # Dark Blue
+        
+        # 3. Advanced Baselines - Statistical (Medium/Bright Blues)
+        'Baseline (RepE)':              {'color': '#2471A3', 'marker': 'v', 'lw': 2.0, 'ls': '-'},   # Strong Blue
+        'Baseline (Mahalanobis)':       {'color': '#2980B9', 'marker': '^', 'lw': 2.0, 'ls': '--'},  # Medium Cobalt
+        'Baseline (LDA)':               {'color': '#3498DB', 'marker': '<', 'lw': 2.0, 'ls': '-.'},  # Bright Azure
+        'Baseline (KNN)':               {'color': '#5DADE2', 'marker': '>', 'lw': 2.0, 'ls': ':'},   # Sky Blue
+        
+        # 4. Basic Baselines (Light/Soft Blues)
+        'Baseline (MLP)':               {'color': '#4A90E2', 'marker': 'D', 'lw': 2.0, 'ls': '-'},   # Dodger Blue (Strongest basic)
+        'Baseline (CCS)':               {'color': '#7FB3D5', 'marker': 'X', 'lw': 2.0, 'ls': '--'},  # Soft Blue
+        'Baseline (LR)':                {'color': '#A9CCE3', 'marker': 's', 'lw': 2.0, 'ls': '-.'},  # Light Blue
+        'Baseline (Mass-Mean)':         {'color': '#D4E6F1', 'marker': 'd', 'lw': 2.0, 'ls': ':'}    # Very Light Blue
     }
-
     for label, aurocs in results_dict.items():
         # Handle flat lines (like Probability / Entropy)
         # Convert numpy array to list for set() check if needed
