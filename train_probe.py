@@ -5,17 +5,16 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 
-from config import DATA_LIMIT, HIDDEN_DIM, get_feature_path, get_checkpoint_path
+from config import DATA_LIMIT, HIDDEN_DIM, BATCH_SIZE, CHECKPOINTS_DIR, get_feature_path, get_checkpoint_path
 from core import FFLayerProbe
 
 # === Configuration ===
 FEATURES_PATH = get_feature_path("simpleqa")
-CHECKPOINTS_DIR = './checkpoints'
 
 def calculate_ff_auroc(pos_tensor, neg_tensor, n_epochs=50, lr=0.005, device='cuda'):
     n_layers = pos_tensor.shape[1]
     input_dim = pos_tensor.shape[2]
-    batch_size = 64
+    batch_size = BATCH_SIZE
     n_repeats = 3
     test_ratio = 0.3
 

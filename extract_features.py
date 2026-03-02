@@ -5,13 +5,8 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from modelscope import snapshot_download
 
-from config import MODEL_ID, CACHE_DIR, DATA_LIMIT, get_feature_path
+from config import MODEL_ID, CACHE_DIR, FEATURES_DIR, DATA_LIMIT, get_feature_path
 from utils import prepare_simpleqa_data, prepare_logiqa_data
-
-# === Configuration ===
-MODEL_ID = 'LLM-Research/Meta-Llama-3.1-8B-Instruct' 
-CACHE_DIR = './model_weights'
-FEATURES_DIR = './features'
 
 def build_universal_eval_prompt(statement: str) -> str:
     return f"Statement: {statement}\nIs this statement true or false? Answer:"

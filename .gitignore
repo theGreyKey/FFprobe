@@ -1,45 +1,74 @@
 # ==========================================
 # 1. Heavy Deep Learning Files
 # ==========================================
-# Ignore raw model weights (Llama/Mistral)
+# Raw model weights (Llama / HuggingFace cache)
 model_weights/
+*.gguf
+*.safetensors
 
-# Ignore extracted hidden state tensors
+# Extracted hidden state tensors
 features/
+
+# Trained probe weights and metrics
+checkpoints/
+
+# Generic binary weight formats (keep *.pt out of repo)
 *.pt
 *.pth
 *.tensor
-*.safetensors
-
-# Ignore trained probe weights and metrics
-checkpoints/
 
 # ==========================================
 # 2. Datasets
 # ==========================================
-# Ignore raw datasets to save repository space
 datasets/*.csv
 datasets/*.txt
 datasets/*.json
+datasets/*.jsonl
 
 # ==========================================
-# 3. Caches
+# 3. Python Cache & Build Artifacts
 # ==========================================
 __pycache__/
 *.py[cod]
 *$py.class
-.ipynb_checkpoints/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
 
 # ==========================================
-# 4. Virtual Environments
+# 4. Jupyter
+# ==========================================
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# ==========================================
+# 5. Virtual Environments
 # ==========================================
 venv/
 env/
+.venv/
 .env
-.venv
 
 # ==========================================
-# 5. OS & IDE Specific
+# 6. Experiment Outputs & Logs
+# ==========================================
+logs/
+runs/
+wandb/
+*.log
+*.out
+outputs/
+
+# ==========================================
+# 7. Claude Code
+# ==========================================
+CLAUDE.md
+
+# ==========================================
+# 8. OS & IDE Specific
 # ==========================================
 .vscode/
 .idea/
