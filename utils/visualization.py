@@ -85,7 +85,7 @@ def plot_auroc_comparison(results_dict):
     ax.set_ylim(0.45, 1.05)
     ax.set_xlim(-1, max_layer + 1)
     
-    ax.legend(loc='lower left', frameon=True, fontsize=11, fancybox=True, shadow=True, ncol=2)
+    ax.legend(loc='upper left', frameon=True, fontsize=11, fancybox=True, shadow=True, ncol=2)
 
     fig.tight_layout()
     plt.show()
@@ -170,3 +170,4 @@ def plot_snr_distribution(pos_scores, neg_scores, layer_idx, learned_threshold=N
     plt.legend(loc='upper left', frameon=True, fancybox=True, framealpha=0.9)
     plt.tight_layout()
     plt.show()
+
