@@ -1,8 +1,11 @@
 # utils/visualization.py
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'results')
 
 def plot_auroc_comparison(results_dict):
     """
@@ -79,6 +82,7 @@ def plot_auroc_comparison(results_dict):
     ax.legend(loc='upper left', frameon=True, fontsize=11, fancybox=True, shadow=True, ncol=2)
 
     fig.tight_layout()
+    fig.savefig(os.path.join(RESULTS_DIR, 'auroc_comparison.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 def generate_academic_baseline_table(results_dict):
@@ -115,12 +119,13 @@ def generate_academic_baseline_table(results_dict):
     print("="*65)
     print(df.to_markdown(index=False, tablefmt="github"))
     print("="*65 + "\n")
-    """
-    # Generate LaTeX code for direct pasting into Overleaf
-    print("💡 LaTeX Code for your paper:")
-    print(df.to_latex(index=False, caption="Baseline comparison of hallucination detection AUROC.", label="tab:baselines"))
-    """
-    
+
+    latex_str = df.to_latex(index=False, caption="Baseline comparison of hallucination detection AUROC.", label="tab:baselines")
+    with open(os.path.join(RESULTS_DIR, 'benchmark_table.txt'), 'w') as f:
+        f.write(df.to_markdown(index=False, tablefmt="github"))
+        f.write('\n\n--- LaTeX ---\n\n')
+        f.write(latex_str)
+
     return df
 
 def plot_peernorm_ablation(full_aurocs, no_peernorm_aurocs):
@@ -144,6 +149,7 @@ def plot_peernorm_ablation(full_aurocs, no_peernorm_aurocs):
     ax.legend(loc='lower right', frameon=True, fontsize=12, fancybox=True, shadow=True)
 
     fig.tight_layout()
+    fig.savefig(os.path.join(RESULTS_DIR, 'peernorm_ablation.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -166,6 +172,7 @@ def plot_origin_tracing(sqa_aucs, lqa_aucs):
     plt.xticks(range(0, len(layers), 2))
 
     plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, 'origin_tracing.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -192,10 +199,8 @@ def plot_snr_distribution(pos_scores, neg_scores, layer_idx, learned_threshold=N
     plt.axvline(mean_neg, color='#c0392b', linestyle=':', linewidth=1.5, label=f'Mean Fake ({mean_neg:.2f})')
     
     if learned_threshold is not None:
-        plt.axvline(learned_threshold, color='#2980b9', linestyle='-', linewidth=2.5, 
+        plt.axvline(learned_threshold, color='#2980b9', linestyle='-', linewidth=2.5,
                     label=f'Learned Threshold ({learned_threshold:.2f})')
-        plt.text(learned_threshold, plt.ylim()[1]*0.85, " Predicted Truth →", 
-                 color='#2980b9', fontweight='bold', va='center')
     
     plt.title(f"FF Probe Energy Distribution (Layer {layer_idx})\nCalculated SNR: {snr:.4f}", fontsize=14)
     plt.xlabel("Goodness Score (Energy)", fontsize=12)
@@ -206,6 +211,7 @@ def plot_snr_distribution(pos_scores, neg_scores, layer_idx, learned_threshold=N
     
     plt.legend(loc='upper left', frameon=True, fancybox=True, framealpha=0.9)
     plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, 'snr_distribution.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -225,6 +231,7 @@ def plot_energy_landscape(g_sqa_pos, g_sqa_neg, g_lqa_pos, g_lqa_neg, target_lay
 
     plt.suptitle('Cross-Domain Goodness Landscape: Feature Reversal Phenomenon', fontsize=16, y=1.05)
     plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, 'energy_landscape.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -237,6 +244,7 @@ def plot_logiqa_landscape(g_lqa_pos, g_lqa_neg, target_layer):
     plt.title(f'Target Domain (LogiQA) - Dedicated Probe at Layer {target_layer}', fontsize=15, pad=15)
     plt.legend(loc='upper right', frameon=True, shadow=True)
     plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, 'logiqa_landscape.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -257,6 +265,7 @@ def plot_neuron_attribution(sqa_weights, lqa_weights, sqa_top_indices, overlap_r
     plt.ylabel('Mean Absolute Weight Magnitude', fontsize=14)
     plt.legend(loc='upper right', frameon=True, shadow=True)
     plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, 'neuron_attribution.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -278,10 +287,11 @@ def plot_topk_overlap_sweep(overlap_ratios, random_chances, k_list):
 
     plt.legend(loc='upper left', frameon=True, shadow=True, fontsize=12)
     plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, 'topk_overlap_sweep.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
-def plot_goodness_trajectory(generated_tokens, g_scores, target_layer):
+def plot_goodness_trajectory(generated_tokens, g_scores, target_layer, save_name=None):
     plt.figure(figsize=(14, 6))
     x_pos = np.arange(len(generated_tokens))
 
@@ -297,6 +307,8 @@ def plot_goodness_trajectory(generated_tokens, g_scores, target_layer):
     plt.xlabel('Generated Tokens', fontsize=14)
     plt.grid(True, linestyle=':', alpha=0.6)
     plt.tight_layout()
+    fname = save_name or 'goodness_trajectory'
+    plt.savefig(os.path.join(RESULTS_DIR, f'{fname}.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -319,5 +331,6 @@ def plot_causal_ablation(g_original, g_ablated, g_rand, top_k, target_layer):
 
     plt.axhline(y=0.5, color='gray', linestyle='--', alpha=0.7)
     plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, 'causal_ablation.png'), dpi=300, bbox_inches='tight')
     plt.show()
 

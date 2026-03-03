@@ -111,13 +111,13 @@ if __name__ == "__main__":
     if simpleqa_data:
         qa_pos, qa_neg = extract_hidden_states(model, tokenizer, simpleqa_data, "SimpleQA")
         save_path_qa = get_feature_path("simpleqa")
-        torch.save({"pos": qa_pos, "neg": qa_neg}, save_path_qa)
+        torch.save({"pos": qa_pos, "neg": qa_neg, "dataset": simpleqa_data}, save_path_qa)
         print(f"💾 Saved SimpleQA features to {save_path_qa}")
     else:
         print("⚠️ SimpleQA extraction skipped.")
 
     # --- Part 2: Extract LogiQA (Logic Transfer) ---
-    logiqa_data = prepare_logiqa_data(file_path="./datasets/test.txt", limit=200) 
+    logiqa_data = prepare_logiqa_data(file_path="./datasets/test.txt", limit=DATA_LIMIT) 
     if logiqa_data:
         lq_pos, lq_neg = extract_hidden_states(model, tokenizer, logiqa_data, "LogiQA")
         save_path_lq = get_feature_path("logiqa")

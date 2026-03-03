@@ -17,6 +17,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 
 # Compatibility with scipy versions for binomial test
@@ -440,8 +441,8 @@ def print_evaluation_report(results, show_comparisons=True):
 
 def get_method_scores_at_layer(method_name, pos_tensor, neg_tensor, layer, split_idx):
     """Re-trains standard baselines on the exact same split to extract test scores for statistical testing."""
-    device = pos_tensor.device  # Dynamically get device
-    
+    device = pos_tensor.device
+
     Xp_tr = pos_tensor[:split_idx, layer, :].cpu().numpy()
     Xp_te = pos_tensor[split_idx:, layer, :].cpu().numpy()
     Xn_tr = neg_tensor[:split_idx, layer, :].cpu().numpy()
@@ -473,23 +474,154 @@ def get_method_scores_at_layer(method_name, pos_tensor, neg_tensor, layer, split
         from utils.baselines import StandardMLP
         mlp = StandardMLP(X_tr.shape[1], 256).to(device)
         opt = optim.Adam(mlp.parameters(), lr=0.005)
-        
+
         X_t = torch.tensor(X_tr, dtype=torch.float32, device=device)
-        # Remove unsqueeze(1) to keep it as a 1D tensor [N]
-        y_t = torch.tensor(y_tr, dtype=torch.float32, device=device) 
-        
+        y_t = torch.tensor(y_tr, dtype=torch.float32, device=device)
+
         mlp.train()
         for _ in range(50):
             opt.zero_grad()
-            # Force mlp output to be 1D with .squeeze() to match y_t
             loss = nn.BCEWithLogitsLoss()(mlp(X_t).squeeze(), y_t)
             loss.backward()
             opt.step()
-            
+
         mlp.eval()
         with torch.no_grad():
             X_te_t = torch.tensor(X_te, dtype=torch.float32, device=device)
             return mlp(X_te_t).cpu().numpy().flatten()
 
+    elif method_name == 'Baseline (Mahalanobis)':
+        mu_pos = np.mean(Xp_tr, axis=0)
+        mu_neg = np.mean(Xn_tr, axis=0)
+        cov = np.cov(X_tr, rowvar=False) + np.eye(X_tr.shape[1]) * 1e-4
+        try:
+            cov_inv = np.linalg.inv(cov)
+        except np.linalg.LinAlgError:
+            cov_inv = np.linalg.pinv(cov)
+        diff_pos = X_te - mu_pos
+        diff_neg = X_te - mu_neg
+        d_pos = np.sum(diff_pos @ cov_inv * diff_pos, axis=1)
+        d_neg = np.sum(diff_neg @ cov_inv * diff_neg, axis=1)
+        return d_neg - d_pos
+
+    elif method_name == 'Baseline (LDA)':
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto').fit(X_tr, y_tr)
+        return clf.predict_proba(X_te)[:, 1]
+
+    elif method_name == 'Baseline (CCS)':
+        input_dim = X_tr.shape[1]
+        Xp_t = torch.tensor(Xp_tr, dtype=torch.float32, device=device)
+        Xn_t = torch.tensor(Xn_tr, dtype=torch.float32, device=device)
+        mu = torch.cat([Xp_t, Xn_t]).mean(0, keepdim=True)
+        std = torch.cat([Xp_t, Xn_t]).std(0, keepdim=True) + 1e-6
+        Xp_t, Xn_t = (Xp_t - mu) / std, (Xn_t - mu) / std
+
+        probe = nn.Linear(input_dim, 1).to(device)
+        with torch.no_grad():
+            probe.weight.copy_((Xp_t.mean(0) - Xn_t.mean(0)).unsqueeze(0))
+            probe.bias.fill_(0.0)
+        opt = optim.AdamW(probe.parameters(), lr=0.005, weight_decay=1e-2)
+        probe.train()
+        for _ in range(200):
+            opt.zero_grad()
+            p_pos = torch.sigmoid(probe(Xp_t).squeeze(-1))
+            p_neg = torch.sigmoid(probe(Xn_t).squeeze(-1))
+            loss = ((p_pos + p_neg - 1.0) ** 2).mean() + (torch.min(p_pos, p_neg) ** 2).mean()
+            loss.backward()
+            opt.step()
+        probe.eval()
+        Xp_te_t = (torch.tensor(Xp_te, dtype=torch.float32, device=device) - mu) / std
+        Xn_te_t = (torch.tensor(Xn_te, dtype=torch.float32, device=device) - mu) / std
+        with torch.no_grad():
+            sp = probe(Xp_te_t).squeeze(-1).cpu().numpy()
+            sn = probe(Xn_te_t).squeeze(-1).cpu().numpy()
+        return np.concatenate([sp, sn])
+
+    elif method_name == 'Baseline (NL-CCS)':
+        from utils.advanced_baselines import _NLCCSNet
+        input_dim = X_tr.shape[1]
+        Xp_t = torch.tensor(Xp_tr, dtype=torch.float32, device=device)
+        Xn_t = torch.tensor(Xn_tr, dtype=torch.float32, device=device)
+        mu = torch.cat([Xp_t, Xn_t]).mean(0, keepdim=True)
+        std = torch.cat([Xp_t, Xn_t]).std(0, keepdim=True) + 1e-6
+        Xp_t, Xn_t = (Xp_t - mu) / std, (Xn_t - mu) / std
+
+        probe = _NLCCSNet(input_dim, hidden_dim=128).to(device)
+        opt = optim.AdamW(probe.parameters(), lr=0.001, weight_decay=1e-2)
+        probe.train()
+        for _ in range(50):
+            opt.zero_grad()
+            p_pos = probe(Xp_t)
+            p_neg = probe(Xn_t)
+            consistency = ((p_pos + p_neg - 1.0) ** 2).mean()
+            informative = (torch.min(p_pos, p_neg) ** 2).mean()
+            confidence = (torch.min(
+                F.binary_cross_entropy(p_pos, torch.ones_like(p_pos), reduction='none'),
+                F.binary_cross_entropy(p_pos, torch.zeros_like(p_pos), reduction='none'),
+            )).mean()
+            loss = consistency + 0.5 * informative + 0.5 * confidence
+            loss.backward()
+            opt.step()
+        probe.eval()
+        Xp_te_t = (torch.tensor(Xp_te, dtype=torch.float32, device=device) - mu) / std
+        Xn_te_t = (torch.tensor(Xn_te, dtype=torch.float32, device=device) - mu) / std
+        with torch.no_grad():
+            sp = probe(Xp_te_t).cpu().numpy()
+            sn = probe(Xn_te_t).cpu().numpy()
+        return np.concatenate([sp, sn])
+
+    elif method_name == 'Baseline (SAPLMA)':
+        from utils.advanced_baselines import _SAPLMANet
+        input_dim = X_tr.shape[1]
+        X_t = torch.tensor(X_tr, dtype=torch.float32, device=device)
+        y_t = torch.tensor(y_tr, dtype=torch.float32, device=device)
+
+        probe = _SAPLMANet(input_dim).to(device)
+        opt = optim.AdamW(probe.parameters(), lr=0.001, weight_decay=1e-2)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=50)
+        criterion = nn.BCEWithLogitsLoss()
+        for _ in range(50):
+            probe.train()
+            perm_b = torch.randperm(len(X_t), device=device)
+            for s in range(0, len(X_t), 64):
+                idx = perm_b[s:s+64]
+                opt.zero_grad()
+                loss = criterion(probe(X_t[idx]), y_t[idx])
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(probe.parameters(), 1.0)
+                opt.step()
+            scheduler.step()
+        probe.eval()
+        with torch.no_grad():
+            X_te_t = torch.tensor(X_te, dtype=torch.float32, device=device)
+            return probe(X_te_t).cpu().numpy().flatten()
+
+    elif method_name == 'Baseline (ConceptBottleneck)':
+        from utils.advanced_baselines import _ConceptBottleneckNet
+        input_dim = X_tr.shape[1]
+        X_t = torch.tensor(X_tr, dtype=torch.float32, device=device)
+        y_t = torch.tensor(y_tr, dtype=torch.float32, device=device)
+
+        probe = _ConceptBottleneckNet(input_dim, n_concepts=32).to(device)
+        opt = optim.AdamW(probe.parameters(), lr=0.003, weight_decay=1e-2)
+        criterion = nn.BCEWithLogitsLoss()
+        for _ in range(50):
+            probe.train()
+            pp = torch.randperm(len(X_t), device=device)
+            for s in range(0, len(X_t), 64):
+                idx = pp[s:s+64]
+                opt.zero_grad()
+                logits, concepts = probe(X_t[idx])
+                loss = criterion(logits, y_t[idx]) + 0.1 * probe.sparsity_loss(concepts)
+                loss.backward()
+                opt.step()
+        probe.eval()
+        with torch.no_grad():
+            X_te_t = torch.tensor(X_te, dtype=torch.float32, device=device)
+            logits, _ = probe(X_te_t)
+            return logits.cpu().numpy().flatten()
+
     else:
+        warnings.warn(f"Unknown method '{method_name}', returning random scores.")
         return np.random.rand(len(X_te))

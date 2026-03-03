@@ -37,6 +37,7 @@ The project is highly modularized into logical Python packages:
 ├── datasets/                                 # Source data (SimpleQA, LogiQA)
 ├── features/                                 # Extracted `.pt` hidden state tensors
 ├── checkpoints/                              # Saved FF Probe weights and metrics
+├── results/                                  # Auto-saved experiment figures (.png) and tables (.txt with LaTeX)
 └── model_weights/                            # Local cache for the Llama-3.1-8B-Instruct model
 ```
 
