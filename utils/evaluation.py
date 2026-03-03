@@ -23,12 +23,14 @@ import torch.optim as optim
 # Compatibility with scipy versions for binomial test
 try:
     from scipy.stats import binomtest as _binomtest
-    def _exact_binom_pvalue(b, n):
-        return _binomtest(b, n, 0.5).pvalue
 except ImportError:
-    from scipy.stats import binom_test as _binom_test
-    def _exact_binom_pvalue(b, n):
-        return _binom_test(b, n, 0.5)
+    _binomtest = None
+
+def _exact_binom_pvalue(b, n):
+    if _binomtest is not None:
+        return _binomtest(b, n, 0.5).pvalue
+    from scipy.stats import binom_test
+    return binom_test(b, n, 0.5)
 
 
 def compute_full_metrics(y_true, y_scores, threshold=None):

@@ -112,6 +112,11 @@ def calculate_lda_auroc(pos_tensor, neg_tensor, test_size=0.3, random_state=42):
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
 
+        n_components = min(128, X_train.shape[0] - 1, X_train.shape[1])
+        pca = PCA(n_components=n_components, random_state=random_state)
+        X_train = pca.fit_transform(X_train)
+        X_test = pca.transform(X_test)
+
         clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')
         clf.fit(X_train, y_train)
         probs = clf.predict_proba(X_test)[:, 1]

@@ -61,6 +61,8 @@ wandb/
 *.log
 *.out
 outputs/
+results/
+*.zip
 
 # ==========================================
 # 7. Claude Code
