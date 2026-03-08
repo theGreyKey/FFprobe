@@ -1,5 +1,6 @@
 # utils/data_loader.py
 import os
+import re
 import json
 import random
 import string
@@ -11,7 +12,37 @@ def normalize_text(s: str) -> str:
     if not isinstance(s, str): return ""
     return s.lower().translate(str.maketrans('', '', string.punctuation)).strip()
 
-def prepare_simpleqa_data(model, tokenizer, limit: int = 200, csv_path: str = "./datasets/simpleqa_verified.csv"):
+def parse_acceptable_range(answer: str):
+    """Parse answers like '370 (acceptable range: anything between 366 and 374)'.
+    Returns (clean_answer, low, high) if a range is found, otherwise (answer, None, None)."""
+    pattern = r'^(.*?)\s*\(acceptable range.*?between\s+([\d.]+)\s+and\s+([\d.]+)\)'
+    m = re.match(pattern, answer, re.IGNORECASE)
+    if m:
+        clean = m.group(1).strip()
+        try:
+            low, high = float(m.group(2)), float(m.group(3))
+            return clean, low, high
+        except ValueError:
+            return clean, None, None
+    return answer, None, None
+
+def is_answer_correct(gen_clean: str, real_clean: str, low, high):
+    """Check if generated answer matches the real answer, considering acceptable ranges."""
+    if real_clean == gen_clean:
+        return True
+    if low is not None and high is not None:
+        # Try to extract a number from the generated answer
+        nums = re.findall(r'[\d.]+', gen_clean)
+        for n in nums:
+            try:
+                val = float(n)
+                if low <= val <= high:
+                    return True
+            except ValueError:
+                continue
+    return False
+
+def prepare_simpleqa_data(model, tokenizer, limit: int = 200, csv_path: str = "./datasets/SimpleQA_verified_eval.csv"):
     """Mines natural hallucinations (OOD errors) from SimpleQA using the model's own generations."""
     print(f"\n🚀 Loading SimpleQA (Target: {limit} samples)...")
     if not os.path.exists(csv_path): 
@@ -80,21 +111,22 @@ def prepare_simpleqa_data(model, tokenizer, limit: int = 200, csv_path: str = ".
             gen_ans = tokenizer.decode(outputs[j][input_len:], skip_special_tokens=True).strip()
             
             real_ans = item.get('answer') or item.get('Answer')
-            real_clean = normalize_text(real_ans)
+            clean_ans, range_low, range_high = parse_acceptable_range(real_ans)
+            real_clean = normalize_text(clean_ans)
             gen_clean = normalize_text(gen_ans)
 
-            is_refusal = any(w in gen_clean for w in refusal_keywords) or len(gen_clean.split()) > 15 
-            
+            is_refusal = any(w in gen_clean for w in refusal_keywords) or len(gen_clean.split()) > 15
+
             if is_refusal:
                 stats["refusal"] += 1
                 continue
-                
-            if real_clean != gen_clean:
+
+            if not is_answer_correct(gen_clean, real_clean, range_low, range_high):
                 stats["natural_error"] += 1
                 processed_data.append({
                     "sys_prompt": "You are a helpful assistant.",
                     "user_content": f"Question: {item.get('problem') or item.get('question')}\nAnswer directly with a short entity:",
-                    "pos_target": real_ans,
+                    "pos_target": clean_ans,
                     "neg_target": gen_ans
                 })
             else:

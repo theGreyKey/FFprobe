@@ -6,24 +6,28 @@ import torch.nn.functional as F
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 def calculate_lr_auroc(pos_tensor, neg_tensor, test_size=0.5, random_state=42):
     n_layers = pos_tensor.shape[1]
     aurocs = []
-    
+
     print("\nTraining LR Baseline...", end="\r")
     for i in range(n_layers):
         X_pos = pos_tensor[:, i, :].cpu().numpy()
         X_neg = neg_tensor[:, i, :].cpu().numpy()
-        
-        X = np.concatenate([X_pos, X_neg])
-        y = np.concatenate([np.ones(len(X_pos)), np.zeros(len(X_neg))])
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state
-        )
+
+        # Use deterministic split to match evaluation protocol
+        N = len(X_pos)
+        split_idx = int((1 - test_size) * N)
+
+        X_pos_train, X_pos_test = X_pos[:split_idx], X_pos[split_idx:]
+        X_neg_train, X_neg_test = X_neg[:split_idx], X_neg[split_idx:]
+
+        X_train = np.concatenate([X_pos_train, X_neg_train])
+        X_test = np.concatenate([X_pos_test, X_neg_test])
+        y_train = np.concatenate([np.ones(len(X_pos_train)), np.zeros(len(X_neg_train))])
+        y_test = np.concatenate([np.ones(len(X_pos_test)), np.zeros(len(X_neg_test))])
         
         clf = LogisticRegression(solver='liblinear', max_iter=500).fit(X_train, y_train)
         probs = clf.predict_proba(X_test)[:, 1]
@@ -39,14 +43,18 @@ def calculate_lr_auroc(pos_tensor, neg_tensor, test_size=0.5, random_state=42):
 def calculate_mass_mean_auroc(pos_tensor, neg_tensor, test_size=0.5, random_state=42):
     n_layers = pos_tensor.shape[1]
     aurocs = []
-    
+
     print("\nCalculating Mass-Mean Baseline...", end="\r")
     for i in range(n_layers):
         X_pos = pos_tensor[:, i, :].cpu().numpy()
         X_neg = neg_tensor[:, i, :].cpu().numpy()
-        
-        Xp_tr, Xp_te = train_test_split(X_pos, test_size=test_size, random_state=random_state)
-        Xn_tr, Xn_te = train_test_split(X_neg, test_size=test_size, random_state=random_state)
+
+        # Use deterministic split to match evaluation protocol
+        N = len(X_pos)
+        split_idx = int((1 - test_size) * N)
+
+        Xp_tr, Xp_te = X_pos[:split_idx], X_pos[split_idx:]
+        Xn_tr, Xn_te = X_neg[:split_idx], X_neg[split_idx:]
         
         mu_pos = np.mean(Xp_tr, axis=0)
         mu_neg = np.mean(Xn_tr, axis=0)
@@ -97,9 +105,10 @@ def calculate_mlp_auroc(pos_tensor, neg_tensor, n_epochs=50, lr=0.005, device='c
         repeat_aucs = []
 
         for _ in range(n_repeats):
-            perm = torch.randperm(N, device=device)
+            # Use deterministic split to match evaluation protocol
             split = int((1 - test_ratio) * N)
-            tr_idx, te_idx = perm[:split], perm[split:]
+            tr_idx = torch.arange(split, device=device)
+            te_idx = torch.arange(split, N, device=device)
 
             Xp_tr, Xp_te = X_pos[tr_idx], X_pos[te_idx]
             Xn_tr, Xn_te = X_neg[tr_idx], X_neg[te_idx]
@@ -152,9 +161,10 @@ def calculate_ccs_auroc(pos_tensor, neg_tensor, n_epochs=200, lr=0.005, device='
         X_pos = pos_tensor[:, i, :]
         X_neg = neg_tensor[:, i, :]
 
-        perm = torch.randperm(N, device=device)
+        # Use deterministic split to match evaluation protocol
         split = int((1 - test_ratio) * N)
-        tr_idx, te_idx = perm[:split], perm[split:]
+        tr_idx = torch.arange(split, device=device)
+        te_idx = torch.arange(split, N, device=device)
 
         Xp_tr, Xp_te = X_pos[tr_idx], X_pos[te_idx]
         Xn_tr, Xn_te = X_neg[tr_idx], X_neg[te_idx]

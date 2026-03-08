@@ -107,7 +107,7 @@ if __name__ == "__main__":
     print("✅ Model loaded successfully!")
     
     # --- Part 1: Extract SimpleQA (Facts) ---
-    simpleqa_data = prepare_simpleqa_data(model, tokenizer, limit=DATA_LIMIT, csv_path="./datasets/simpleqa_verified.csv")
+    simpleqa_data = prepare_simpleqa_data(model, tokenizer, limit=DATA_LIMIT, csv_path="./datasets/SimpleQA_verified_eval.csv")
     if simpleqa_data:
         qa_pos, qa_neg = extract_hidden_states(model, tokenizer, simpleqa_data, "SimpleQA")
         save_path_qa = get_feature_path("simpleqa")

@@ -11,7 +11,6 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 
@@ -28,12 +27,17 @@ def calculate_knn_auroc(pos_tensor, neg_tensor, k=5, test_size=0.3, random_state
         X_pos = pos_tensor[:, i, :].cpu().numpy()
         X_neg = neg_tensor[:, i, :].cpu().numpy()
 
-        X = np.concatenate([X_pos, X_neg])
-        y = np.concatenate([np.ones(len(X_pos)), np.zeros(len(X_neg))])
+        # Use deterministic split to match evaluation protocol
+        N = len(X_pos)
+        split_idx = int((1 - test_size) * N)
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state, stratify=y
-        )
+        X_pos_train, X_pos_test = X_pos[:split_idx], X_pos[split_idx:]
+        X_neg_train, X_neg_test = X_neg[:split_idx], X_neg[split_idx:]
+
+        X_train = np.concatenate([X_pos_train, X_neg_train])
+        X_test = np.concatenate([X_pos_test, X_neg_test])
+        y_train = np.concatenate([np.ones(len(X_pos_train)), np.zeros(len(X_neg_train))])
+        y_test = np.concatenate([np.ones(len(X_pos_test)), np.zeros(len(X_neg_test))])
 
         clf = KNeighborsClassifier(n_neighbors=k, metric='cosine', weights='distance')
         clf.fit(X_train, y_train)
@@ -60,8 +64,12 @@ def calculate_mahalanobis_auroc(pos_tensor, neg_tensor, test_size=0.3, random_st
         X_pos = pos_tensor[:, i, :].cpu().numpy()
         X_neg = neg_tensor[:, i, :].cpu().numpy()
 
-        Xp_tr, Xp_te = train_test_split(X_pos, test_size=test_size, random_state=random_state)
-        Xn_tr, Xn_te = train_test_split(X_neg, test_size=test_size, random_state=random_state)
+        # Use deterministic split to match evaluation protocol
+        N = len(X_pos)
+        split_idx = int((1 - test_size) * N)
+
+        Xp_tr, Xp_te = X_pos[:split_idx], X_pos[split_idx:]
+        Xn_tr, Xn_te = X_neg[:split_idx], X_neg[split_idx:]
 
         mu_pos = np.mean(Xp_tr, axis=0)
         mu_neg = np.mean(Xn_tr, axis=0)
@@ -105,21 +113,36 @@ def calculate_lda_auroc(pos_tensor, neg_tensor, test_size=0.3, random_state=42):
         X_pos = pos_tensor[:, i, :].cpu().numpy()
         X_neg = neg_tensor[:, i, :].cpu().numpy()
 
-        X = np.concatenate([X_pos, X_neg])
-        y = np.concatenate([np.ones(len(X_pos)), np.zeros(len(X_neg))])
+        # Use deterministic split to match evaluation protocol
+        N = len(X_pos)
+        split_idx = int((1 - test_size) * N)
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state, stratify=y
-        )
+        X_pos_train, X_pos_test = X_pos[:split_idx], X_pos[split_idx:]
+        X_neg_train, X_neg_test = X_neg[:split_idx], X_neg[split_idx:]
+
+        X_train = np.concatenate([X_pos_train, X_neg_train])
+        X_test = np.concatenate([X_pos_test, X_neg_test])
+        y_train = np.concatenate([np.ones(len(X_pos_train)), np.zeros(len(X_neg_train))])
+        y_test = np.concatenate([np.ones(len(X_pos_test)), np.zeros(len(X_neg_test))])
+
+        # Check for zero variance to avoid PCA warnings
+        if np.std(X_train) < 1e-8:
+            aurocs.append(0.5)
+            continue
 
         n_components = min(128, X_train.shape[0] - 1, X_train.shape[1])
-        pca = PCA(n_components=n_components, random_state=random_state)
-        X_train = pca.fit_transform(X_train)
-        X_test = pca.transform(X_test)
+
+        # Suppress PCA warnings for low-variance data
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            pca = PCA(n_components=n_components, random_state=random_state)
+            X_train_pca = pca.fit_transform(X_train)
+            X_test_pca = pca.transform(X_test)
 
         clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')
-        clf.fit(X_train, y_train)
-        probs = clf.predict_proba(X_test)[:, 1]
+        clf.fit(X_train_pca, y_train)
+        probs = clf.predict_proba(X_test_pca)[:, 1]
 
         try:
             auc = roc_auc_score(y_test, probs)
@@ -206,9 +229,10 @@ def calculate_nlccs_auroc(pos_tensor, neg_tensor, n_epochs=50, lr=0.001,
         X_pos = pos_tensor[:, i, :]
         X_neg = neg_tensor[:, i, :]
 
-        perm = torch.randperm(N, device=device)
+        # Use deterministic split to match evaluation protocol
         split = int((1 - test_ratio) * N)
-        tr_idx, te_idx = perm[:split], perm[split:]
+        tr_idx = torch.arange(split, device=device)
+        te_idx = torch.arange(split, N, device=device)
 
         Xp_tr, Xp_te = X_pos[tr_idx], X_pos[te_idx]
         Xn_tr, Xn_te = X_neg[tr_idx], X_neg[te_idx]
@@ -291,9 +315,10 @@ def calculate_saplma_auroc(pos_tensor, neg_tensor, n_epochs=50, lr=0.001,
         repeat_aucs = []
 
         for _ in range(n_repeats):
-            perm = torch.randperm(N, device=device)
+            # Use deterministic split to match evaluation protocol
             split = int((1 - test_ratio) * N)
-            tr_idx, te_idx = perm[:split], perm[split:]
+            tr_idx = torch.arange(split, device=device)
+            te_idx = torch.arange(split, N, device=device)
 
             Xp_tr, Xp_te = X_pos[tr_idx], X_pos[te_idx]
             Xn_tr, Xn_te = X_neg[tr_idx], X_neg[te_idx]
@@ -375,9 +400,10 @@ def calculate_concept_bottleneck_auroc(pos_tensor, neg_tensor, n_concepts=32,
         repeat_aucs = []
 
         for _ in range(n_repeats):
-            perm = torch.randperm(N, device=device)
+            # Use deterministic split to match evaluation protocol
             split = int((1 - test_ratio) * N)
-            tr_idx, te_idx = perm[:split], perm[split:]
+            tr_idx = torch.arange(split, device=device)
+            te_idx = torch.arange(split, N, device=device)
 
             X_tr = torch.cat([X_pos[tr_idx], X_neg[tr_idx]])
             y_tr = torch.cat([torch.ones(len(tr_idx), device=device),

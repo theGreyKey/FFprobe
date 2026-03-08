@@ -33,9 +33,11 @@ def calculate_ff_auroc(pos_tensor, neg_tensor, n_epochs=50, lr=0.005, device='cu
         best_auc, best_state = -1.0, None
 
         for _ in range(n_repeats):
-            perm = torch.randperm(N, device=device)
+            # Use deterministic split to match evaluation protocol
+            # This ensures no data leakage between training and testing
             split = int((1 - test_ratio) * N)
-            tr_idx, te_idx = perm[:split], perm[split:]
+            tr_idx = torch.arange(split, device=device)
+            te_idx = torch.arange(split, N, device=device)
 
             Xp_tr, Xp_te = X_pos[tr_idx], X_pos[te_idx]
             Xn_tr, Xn_te = X_neg[tr_idx], X_neg[te_idx]
